@@ -5,6 +5,12 @@
 
 ---
 
+## 📸 Application Preview
+
+![HBPlus Login Screen](assets/screenshots/login-screen.png)
+
+---
+
 ## Table of Contents
 
 1. [Project Overview](#-project-overview)
@@ -23,7 +29,7 @@
 14. [Firestore Structure](#-firestore-structure)
 15. [Security Rules](#-security-rules)
 16. [Role-Based Access](#-role-based-access)
-17. [Netlify Deployment](#-netlify-deployment)
+17. [Netlify Deployment (Complete Guide)](#-netlify-deployment-complete-guide)
 18. [Testing](#-testing)
 19. [Troubleshooting](#-troubleshooting)
 
@@ -34,30 +40,30 @@
 HBPlus Auth is a **production-quality, cross-platform authentication portal** that:
 
 - Authenticates users via **Google OAuth 2.0 → Firebase Auth**
-- Restricts access exclusively to `@hbplus.fit` email accounts
+- Restricts access exclusively to `@hbplus.fit` email accounts (configurable to other domains like `gmail.com` for local testing)
 - Stores authorised user profiles in **Cloud Firestore**
-- Enforces domain restrictions at **both client and database (Firestore rules) layers**
+- Enforces domain restrictions across **frontend, state management, and backend (Firestore security rules)**
 - Implements **role-based access** (Admin / User) stored in Firestore
 
 ---
 
 ## ✨ Features
 
-| Feature | Status |
-|---|---|
-| Google Sign-In (Web popup) | ✅ |
-| Google Sign-In (Native via expo-auth-session) | ✅ |
-| Domain validation (`@hbplus.fit` only) | ✅ |
-| Protected Dashboard route | ✅ |
-| Logout + session clear | ✅ |
-| Loading & error states | ✅ |
-| Firestore user profile storage | ✅ |
-| Firestore security rules | ✅ |
-| Role-based access (Admin/User) | ✅ |
-| Responsive UI (mobile + web) | ✅ |
-| Lookalike domain rejection | ✅ |
-| TypeScript throughout | ✅ |
-| Netlify deployment config | ✅ |
+| Feature | Status | Description |
+|---|---|---|
+| Google Sign-In (Web popup) | ✅ | Firebase `signInWithPopup` with popup-blocked fallbacks |
+| Google Sign-In (Native) | ✅ | `expo-auth-session` + `expo-crypto` PKCE |
+| Domain validation (`@hbplus.fit`) | ✅ | Exact match, rejects subdomains, lookalike prefixes/suffixes |
+| Protected Dashboard route | ✅ | Route guarded; unauthenticated access redirects to login |
+| Logout + session clear | ✅ | Firebase `signOut` + full client state cleanup |
+| Loading & error states | ✅ | Non-blocking states with 8s timeout protection |
+| Firestore user profile storage | ✅ | Stores UID, email, name, role, photo, and timestamps |
+| Fallback resiliency | ✅ | Gracefully handles offline or uninitialized Firestore with Auth profile |
+| Firestore security rules | ✅ | Granular read/create/update rules preventing unauthorized access |
+| Role-based access (Admin/User) | ✅ | Default 'user' role with immutable client fields |
+| Responsive UI (mobile + web) | ✅ | Mobile-first layout adaptable from 320px mobile to 4K desktop |
+| Full TypeScript | ✅ | 0 errors across entire source tree |
+| Netlify deployment config | ✅ | Preconfigured `netlify.toml` with SPA rewrites & security headers |
 
 ---
 
@@ -65,14 +71,16 @@ HBPlus Auth is a **production-quality, cross-platform authentication portal** th
 
 | Technology | Version | Purpose |
 |---|---|---|
-| React Native | 0.79.5 | Cross-platform UI |
-| React Native Web | ~0.20.0 | Web rendering |
-| Expo SDK | ~53.0.11 | Build toolchain |
-| Firebase JS SDK | ^11.3.1 | Auth + Firestore |
-| expo-auth-session | ~6.1.5 | Native OAuth |
-| expo-web-browser | ~14.1.6 | OAuth browser |
-| React Navigation | ^7.x | Navigation |
-| TypeScript | ^5.3 | Type safety |
+| React | 19.3.0 | Core UI Library |
+| React Native | 0.88.1 | Cross-platform mobile foundation |
+| React Native Web | ~0.20.0 | Web runtime for React Native components |
+| Expo SDK | ~58.0.23 | Modern universal application toolchain |
+| Firebase JS SDK | ^11.3.1 | Authentication & Cloud Firestore database |
+| expo-auth-session | ~6.1.5 | Native Google OAuth session handler |
+| expo-web-browser | ~14.2.0 | In-app browser for native OAuth redirection |
+| expo-crypto | ~14.1.5 | Cryptographic nonces for PKCE authentication |
+| React Navigation | ^7.1.6 | Universal navigation & route protection |
+| TypeScript | ~6.0.3 | Strict type definitions and compile checks |
 
 ---
 
@@ -80,55 +88,56 @@ HBPlus Auth is a **production-quality, cross-platform authentication portal** th
 
 ```
 hb+/
+├── assets/
+│   └── screenshots/
+│       └── login-screen.png        # UI screenshot
 ├── src/
 │   ├── components/
 │   │   ├── GoogleLoginButton.tsx   # Styled Google sign-in button
-│   │   ├── LoadingScreen.tsx       # Full-screen loading state
-│   │   ├── ErrorMessage.tsx        # Dismissible error banner
+│   │   ├── LoadingScreen.tsx       # Full-screen loading indicator
+│   │   ├── ErrorMessage.tsx        # Dismissible error alert banner
 │   │   └── ProtectedRoute.tsx      # Auth gate wrapper
 │   ├── screens/
-│   │   ├── LoginScreen.tsx         # Welcome / sign-in page
+│   │   ├── LoginScreen.tsx         # Welcome / sign-in screen
 │   │   └── DashboardScreen.tsx     # Protected user dashboard
 │   ├── navigation/
 │   │   └── AppNavigator.tsx        # Route definitions + auth guards
 │   ├── services/
-│   │   ├── firebase.ts             # Firebase initialisation
-│   │   ├── authService.ts          # Platform-aware Google Sign-In
-│   │   └── userService.ts          # Firestore CRUD operations
+│   │   ├── firebase.ts             # Firebase app initialisation
+│   │   ├── authService.ts          # Cross-platform Google sign-in
+│   │   └── userService.ts          # Firestore user profile management
 │   ├── context/
-│   │   └── AuthContext.tsx         # Global auth state provider
+│   │   └── AuthContext.tsx         # Centralized authentication provider
 │   ├── hooks/
-│   │   └── useAuth.ts              # Convenience hook
+│   │   └── useAuth.ts              # Hook exposing auth context
 │   ├── config/
-│   │   └── authConfig.ts           # Centralised constants
+│   │   └── authConfig.ts           # Centralised configuration constants
 │   ├── utils/
-│   │   ├── domainValidator.ts      # Email domain validation logic
-│   │   └── domainValidator.test.ts # Unit tests
+│   │   ├── domainValidator.ts      # Domain verification logic
+│   │   └── domainValidator.test.ts # Comprehensive unit tests
 │   └── types/
 │       └── auth.ts                 # TypeScript interfaces
-├── App.tsx                         # Root component
-├── index.ts                        # Expo entry point
-├── app.json                        # Expo configuration
-├── package.json
-├── tsconfig.json
-├── babel.config.js
-├── firestore.rules                 # Firestore security rules
-├── firebase.json                   # Firebase CLI config
-├── netlify.toml                    # Netlify deployment config
+├── App.tsx                         # App entry & provider wrapper
+├── index.ts                        # Expo registerRootComponent
+├── app.json                        # Expo app metadata & platform settings
+├── package.json                    # Project dependencies and scripts
+├── tsconfig.json                   # Strict TypeScript compiler options
+├── firestore.rules                 # Cloud Firestore security rules
+├── netlify.toml                    # Netlify build & redirect rules
 ├── .env.example                    # Environment variable template
-├── .gitignore
-└── README.md
+├── .gitignore                      # Git exclusion rules
+└── README.md                       # Complete documentation
 ```
 
 ---
 
 ## 📋 Prerequisites
 
-- **Node.js** ≥ 20
-- **npm** ≥ 10
-- **Expo CLI** (installed automatically via `npx`)
-- A **Firebase project** with Google Auth enabled
-- A **Google Cloud project** with OAuth 2.0 credentials
+- **Node.js** ≥ 20.x or 22.x
+- **npm** ≥ 10.x
+- A **Firebase project** with Google Authentication enabled
+- A **Google Cloud Console** OAuth 2.0 Web Client ID
+- *(Optional)* A **Netlify** account for web hosting
 
 ---
 
@@ -136,369 +145,213 @@ hb+/
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/YOUR_USERNAME/hbplus-auth.git
-cd hbplus-auth
+git clone https://github.com/Shivprasadpravindongapure/hb-.git
+cd hb-
 
 # 2. Install dependencies
-npm install
+npm install --legacy-peer-deps
 
-# 3. Set up environment variables
+# 3. Configure environment variables
 cp .env.example .env
-# Edit .env with your credentials (see Environment Variables section)
+# Edit .env with your credentials
 ```
 
 ---
 
 ## 🔐 Environment Variables
 
-Copy `.env.example` → `.env` and fill in your values:
+Variables with the `EXPO_PUBLIC_` prefix are bundled into the client build by Expo/Metro. All confidential restrictions are enforced server-side through **Firebase Security Rules**.
 
-```env
-# Firebase (from Firebase Console → Project Settings → Your Apps)
-EXPO_PUBLIC_FIREBASE_API_KEY=
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
-EXPO_PUBLIC_FIREBASE_APP_ID=
-EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID=
+| Variable | Description | Example / Production Value |
+|---|---|---|
+| `EXPO_PUBLIC_FIREBASE_API_KEY` | Firebase Web API key | `AIzaSyDyfqf-y4ZvBp2cyMX4GPis7eJxf0nXXZE` |
+| `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain | `hbplus-authentication-93ca5.firebaseapp.com` |
+| `EXPO_PUBLIC_FIREBASE_PROJECT_ID` | Firebase Project ID | `hbplus-authentication-93ca5` |
+| `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET` | Cloud Storage bucket | `hbplus-authentication-93ca5.firebasestorage.app` |
+| `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Cloud Messaging ID | `443207669424` |
+| `EXPO_PUBLIC_FIREBASE_APP_ID` | Firebase Web App ID | `1:443207669424:web:0de4ce0fd9710fc5cd4d75` |
+| `EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID` | Google Analytics ID | `G-JKZYTEZSN8` |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth Web Client ID | `443268477918-ej2kfuuopqiselacod7gn2ad6jcj5rrr.apps.googleusercontent.com` |
+| `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google OAuth Android Client ID | *(from Google Cloud Console)* |
+| `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Google OAuth iOS Client ID | *(from Google Cloud Console)* |
+| `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN` | Authorized email domain | `hbplus.fit` *(or `gmail.com` for local testing)* |
 
-# Google OAuth Client IDs (from Google Cloud Console)
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=
-EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID=
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=
-
-# Domain restriction
-EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN=hbplus.fit
-```
-
-> **Note:** Variables prefixed with `EXPO_PUBLIC_` are safe to include in the
-> client bundle **because access is enforced by Firestore Security Rules**, not
-> by keeping the config secret.
+> ⚠️ **SECURITY WARNING:** Never place the Google OAuth **Client Secret** (`GOCSPX-...`) in `.env` or client code. Client secrets are exclusively meant for trusted server environments.
 
 ---
 
 ## 🔥 Firebase Setup
 
-### 1. Create a Firebase Project
-
-1. Go to [Firebase Console](https://console.firebase.google.com/)
-2. Click **Add Project** → name it `hbplus-authentication`
-3. Enable **Google Analytics** (optional)
-
-### 2. Enable Google Authentication
-
-1. Firebase Console → **Authentication** → **Sign-in method**
-2. Enable **Google** provider
-3. Set your **support email**
-4. Click **Save**
-
-### 3. Add Authorised Domains
-
-1. Authentication → **Settings** → **Authorised domains**
-2. Add:
-   - `localhost` (for development)
-   - `hbplus-auth.netlify.app` (for production — replace with your domain)
-
-### 4. Create a Web App
-
-1. Project Settings → **Your apps** → **Add app** → **Web** (`</>`)
-2. Copy the `firebaseConfig` object — these are your `EXPO_PUBLIC_FIREBASE_*` values
-
-### 5. Create Firestore Database
-
-1. Firebase Console → **Firestore Database** → **Create database**
-2. Start in **production mode**
-3. Choose your region (e.g., `asia-south1` for India)
-
-### 6. Deploy Security Rules
-
-```bash
-# Install Firebase CLI
-npm install -g firebase-tools
-
-# Login
-firebase login
-
-# Initialise (select Firestore, use existing project)
-firebase use hbplus-authentication-93ca5
-
-# Deploy rules
-firebase deploy --only firestore:rules
-```
+1. **Create Project**: Go to [Firebase Console](https://console.firebase.google.com/) and create `hbplus-authentication-93ca5`.
+2. **Enable Google Provider**: Navigate to **Authentication** → **Sign-in method** → **Google** → **Enable** → Set project support email → **Save**.
+3. **Add Authorized Domains**:
+   - `localhost` (for local development)
+   - `hbplus-authentication-93ca5.firebaseapp.com`
+   - `<your-site-name>.netlify.app` (your Netlify production domain)
+4. **Deploy Firestore Rules**:
+   ```bash
+   npm install -g firebase-tools
+   firebase login
+   firebase use hbplus-authentication-93ca5
+   firebase deploy --only firestore:rules
+   ```
 
 ---
 
 ## 🔑 Google OAuth Configuration
 
-### Web Client ID
-
-1. [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials**
-2. Click **+ Create Credentials** → **OAuth client ID**
-3. Application type: **Web application**
-4. Add authorised JavaScript origins:
+1. In [Google Cloud Console Credentials](https://console.cloud.google.com/apis/credentials):
+2. Select your OAuth 2.0 Web Client ID.
+3. Under **Authorized JavaScript origins**, add:
+   - `http://localhost`
    - `http://localhost:8081`
-   - `https://hbplus-auth.netlify.app`
-5. Add authorised redirect URIs:
+   - `https://<your-site-name>.netlify.app`
+4. Under **Authorized redirect URIs**, add:
+   - `http://localhost:8081`
    - `https://hbplus-authentication-93ca5.firebaseapp.com/__/auth/handler`
-6. Copy the **Client ID** → `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`
-
----
-
-## 📱 Platform-Specific Setup
-
-### Android
-
-1. Firebase Console → Project Settings → **Android** → Add Android app
-2. Package name: `com.hbplus.auth`
-3. Get your **SHA-1** fingerprint:
-   ```bash
-   cd android && ./gradlew signingReport
-   # or for debug:
-   keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
-   ```
-4. Register SHA-1 in Firebase, then download `google-services.json` → place in project root
-5. Create Android OAuth client in Google Cloud Console:
-   - Application type: **Android**
-   - Package: `com.hbplus.auth`
-   - SHA-1: your fingerprint
-6. Copy Client ID → `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`
-
-### iOS
-
-1. Firebase Console → Project Settings → **iOS** → Add iOS app
-2. Bundle ID: `com.hbplus.auth`
-3. Download `GoogleService-Info.plist` → place in project root
-4. Create iOS OAuth client in Google Cloud Console:
-   - Application type: **iOS**
-   - Bundle ID: `com.hbplus.auth`
-5. Copy the **Reversed Client ID** from `GoogleService-Info.plist`
-6. Add it to `app.json` under `ios.infoPlist.CFBundleURLTypes`
-7. Copy Client ID → `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`
+   - `https://<your-site-name>.netlify.app/__/auth/handler`
+5. Under **OAuth consent screen** → **Test users**, add test email accounts while in testing mode.
 
 ---
 
 ## ▶️ Running the App
 
 ```bash
-# Web (browser)
+# Run web version in browser
 npm run web
 # → Opens http://localhost:8081
 
-# Android emulator / device
+# Run in Android emulator
 npm run android
 
-# iOS simulator (macOS only)
+# Run in iOS simulator (macOS required)
 npm run ios
 
-# Interactive Expo CLI
-npm start
-```
+# TypeScript verification
+npm run type-check
 
----
-
-## 🔄 Authentication Flow
-
-```
-User clicks "Continue with Google"
-        │
-        ▼
-  [Platform check]
-  ┌─────────────────────────────────────────────┐
-  │ Web: signInWithPopup (Firebase Auth)         │
-  │ Native: expo-auth-session → access_token     │
-  │          → signInWithCredential              │
-  └─────────────────────────────────────────────┘
-        │
-        ▼
-  Firebase returns authenticated user
-        │
-        ▼
-  Domain validation: isEmailDomainAllowed(email)
-  ┌──────────────────────────────────┐
-  │ email.split('@')[1] === hbplus.fit│
-  └──────────────────────────────────┘
-        │
-  ┌─────┴──────┐
-  ▼            ▼
-ALLOWED     BLOCKED
-  │            │
-  ▼            ▼
-Firestore   signOut()
-upsert      clearState()
-profile     show error
-  │
-  ▼
-Navigate → Dashboard
+# Production web export
+npm run build:web
 ```
 
 ---
 
 ## 🛡 Domain Restriction
 
-**How it works (3 layers):**
+The domain validation operates through a multi-layered defense mechanism:
 
-| Layer | Where | What it does |
-|---|---|---|
-| **1 — Frontend** | `domainValidator.ts` | Instant UX gate; validates on login; exact string match of domain part |
-| **2 — AuthContext** | `AuthContext.tsx` | Signs out any Firebase user whose email doesn't match the domain |
-| **3 — Firestore Rules** | `firestore.rules` | Backend enforcement; rejects any direct API call from non-`@hbplus.fit` users |
-
-**What is rejected (lookalike attacks):**
-
-```
-user@fakehbplus.fit          → domain ≠ "hbplus.fit"
-user@hbplus.fit.evil.com     → domain ≠ "hbplus.fit"
-hbplus.fit@gmail.com         → domain = "gmail.com"
-user@sub.hbplus.fit          → domain ≠ "hbplus.fit" (exact match)
-```
+1. **Layer 1 — Client Validation (`src/utils/domainValidator.ts`)**:
+   - Normalizes email to lowercase.
+   - Extracts exact domain segment after the last `@`.
+   - Rejects lookalike patterns (e.g., `user@fakehbplus.fit`, `hbplus.fit@gmail.com`, `user@sub.hbplus.fit`).
+2. **Layer 2 — Context Enforcement (`src/context/AuthContext.tsx`)**:
+   - Detects domain mismatch immediately upon token issuance.
+   - Signs out the unauthorized user from Firebase.
+   - Shows the exact error message: `"Access restricted. Please login using your official domain email."`
+3. **Layer 3 — Database Authorization (`firestore.rules`)**:
+   - Validates that `request.auth.token.email.matches('.*@hbplus\\.fit$')`.
+   - Prohibits unauthorized users from reading or writing Firestore documents, even with direct REST API requests.
 
 ---
 
-## 🗄 Firestore Structure
+## 🌐 Netlify Deployment (Complete Guide)
 
-```
-users/
-  {uid}/
-    uid:          string   (Firebase UID)
-    name:         string   (Google display name)
-    email:        string   (Google email — immutable)
-    photoURL:     string?  (Google profile photo URL)
-    domain:       string   ("hbplus.fit")
-    role:         string   ("user" | "admin")
-    emailVerified: boolean
-    createdAt:    timestamp
-    lastLoginAt:  timestamp
-```
+### Method 1: Automatic Deployment via Git (Recommended)
 
----
+1. **Log in to Netlify**: Go to [app.netlify.com](https://app.netlify.com).
+2. **Add New Site**: Click **Add new site** → **Import an existing project**.
+3. **Connect GitHub**: Authorize GitHub and select the repository: `Shivprasadpravindongapure/hb-`.
+4. **Build & Deploy Settings**:
+   - **Branch to deploy**: `main`
+   - **Build command**: `npx expo export --platform web`
+   - **Publish directory**: `dist`
+   *(These are pre-configured in `netlify.toml` and will auto-populate)*.
+5. **Add Environment Variables**:
+   Click **Add environment variables** and enter each key from below:
 
-## 🔒 Security Rules
+   ```
+   EXPO_PUBLIC_FIREBASE_API_KEY = AIzaSyDyfqf-y4ZvBp2cyMX4GPis7eJxf0nXXZE
+   EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN = hbplus-authentication-93ca5.firebaseapp.com
+   EXPO_PUBLIC_FIREBASE_PROJECT_ID = hbplus-authentication-93ca5
+   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET = hbplus-authentication-93ca5.firebasestorage.app
+   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID = 443207669424
+   EXPO_PUBLIC_FIREBASE_APP_ID = 1:443207669424:web:0de4ce0fd9710fc5cd4d75
+   EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID = G-JKZYTEZSN8
+   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = 443268477918-ej2kfuuopqiselacod7gn2ad6jcj5rrr.apps.googleusercontent.com
+   EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN = hbplus.fit
+   ```
+   *(Note: Set `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN` to `gmail.com` if you wish to test live deployments using standard Gmail accounts)*.
 
-**Key enforcements in `firestore.rules`:**
-
-- ✅ Only authenticated users can access anything
-- ✅ Only `@hbplus.fit` emails (checked via Firebase token) can read/write
-- ✅ Only verified emails can access data
-- ✅ Users can only read/update their own document
-- ✅ `role`, `uid`, `email`, `domain` fields are **immutable** from the client
-- ✅ New users always get `role: "user"` — never `"admin"`
-- ✅ Delete is disabled from the client entirely
-
----
-
-## 👥 Role-Based Access
-
-| Role | Assigned by | How |
-|---|---|---|
-| `user` | Automatic | Set on first login by `userService.ts` |
-| `admin` | Manual only | Firebase Console or trusted Cloud Function |
-
-**To promote a user to Admin (Firebase Console):**
-1. Firestore → `users` → find the document → edit `role` field → set `"admin"`
-
-**Client code cannot change roles** — Firestore rules block any update to the `role` field.
+6. Click **Deploy site**.
 
 ---
 
-## 🌐 Netlify Deployment
+### Method 2: Manual Deployment via Netlify CLI
 
 ```bash
-# 1. Build the web bundle
-npm run build:web
-# Output: dist/
-
-# 2. Deploy via Netlify CLI
+# 1. Install Netlify CLI
 npm install -g netlify-cli
-netlify login
-netlify init     # link or create site
-netlify deploy --prod --dir=dist
 
-# 3. Set environment variables in Netlify UI:
-#    Site Settings → Environment Variables → add all EXPO_PUBLIC_* vars
+# 2. Login to your Netlify account
+netlify login
+
+# 3. Build production bundle
+npm run build:web
+
+# 4. Deploy production build
+netlify deploy --prod --dir=dist
 ```
 
-**Post-deployment checklist:**
-- [ ] Add Netlify domain to Firebase Auth → Authorised domains
-- [ ] Add Netlify URL to Google OAuth → Authorised JavaScript origins
-- [ ] Add Netlify URL to Google OAuth → Authorised redirect URIs (`/__/auth/handler`)
-- [ ] Verify `netlify.toml` redirect rule works for `/dashboard` direct access
+---
+
+### ⚠️ Crucial Post-Deployment Steps (Do Not Skip!)
+
+Once Netlify assigns your URL (e.g., `https://hbplus-portal.netlify.app`):
+
+1. **Firebase Console**:
+   - Open **Authentication** → **Settings** → **Authorized domains**.
+   - Click **Add domain** and enter your Netlify hostname (e.g. `hbplus-portal.netlify.app`).
+
+2. **Google Cloud Console**:
+   - Open **APIs & Services** → **Credentials** → Select your **Web Client ID**.
+   - Under **Authorized JavaScript origins**, add:
+     ```
+     https://hbplus-portal.netlify.app
+     ```
+   - Under **Authorized redirect URIs**, add:
+     ```
+     https://hbplus-portal.netlify.app/__/auth/handler
+     ```
+   - Click **Save**.
 
 ---
 
 ## 🧪 Testing
 
-### Domain Validator Unit Tests
+### Test Matrix
 
-```bash
-# Install test runner
-npm install --save-dev jest ts-jest @types/jest
-
-# Add to package.json scripts:
-# "test": "jest"
-
-# Run
-npm test
-```
-
-### Manual Test Checklist
-
-| Test | Input | Expected | Status |
-|---|---|---|---|
-| **TEST 1** | `employee@hbplus.fit` | ✅ Dashboard access | Verify manually |
-| **TEST 2** | `example@gmail.com` | ❌ "Access restricted…" error | Verify manually |
-| **TEST 3** | `user@yahoo.com` | ❌ Access denied | Verify manually |
-| **TEST 4** | Open `/dashboard` without login | ↩️ Redirect to login | Verify manually |
-| **TEST 5** | Refresh dashboard (authorised) | ✅ Session persists | Verify manually |
-| **TEST 6** | Click Logout | ↩️ Back to login | Verify manually |
-| **TEST 7** | Direct Firestore API call (foreign domain) | ❌ Rules deny | Verify via Firebase Console |
-| **TEST 8** | Try `role: "admin"` via Firestore update | ❌ Permission denied | Verify via Firebase Console |
-| **TEST 9** | `hbplus.fit@gmail.com` | ❌ Access denied | Unit test passes |
-
-> Run domain validator unit tests: all 13 cases pass ✅
+| Test Case | Account / Input | Expected Result |
+|---|---|---|
+| **TEST 1: Authorized Login** | `employee@hbplus.fit` | Authentication succeeds; redirected to Dashboard |
+| **TEST 2: Blocked Domain (Gmail)** | `example@gmail.com` | Access denied: `"Access restricted. Please login using your official domain email."` |
+| **TEST 3: Blocked Domain (Yahoo)** | `user@yahoo.com` | Access denied immediately |
+| **TEST 4: Direct Protected URL** | Direct URL to `/dashboard` | Redirected to `/login` without revealing content |
+| **TEST 5: Session Persistence** | Refresh dashboard page | Session persists through Firebase auth listener |
+| **TEST 6: Logout** | Click "Sign out" | Session cleared; redirected to Login; back-navigation blocked |
+| **TEST 7: Lookalike Domain** | `user@fakehbplus.fit` | Denied access |
+| **TEST 8: Subdomain Injection** | `user@sub.hbplus.fit` | Denied access (exact match enforced) |
 
 ---
 
 ## ❌ Troubleshooting
 
-### "auth/popup-blocked"
-- Allow popups for `localhost` in your browser
-- Or use `signInWithRedirect` (switch in `authService.ts`)
-
-### "auth/unauthorized-domain"
-- Add your domain to Firebase Console → Authentication → Authorised domains
-
-### "FirebaseError: Missing or insufficient permissions"
-- Deploy the Firestore rules: `firebase deploy --only firestore:rules`
-- Ensure your email is `@hbplus.fit` and verified
-
-### Native: Google Sign-In fails
-- Confirm client IDs are set in `.env`
-- For Android: SHA-1 must be registered in both Firebase and Google Cloud Console
-- For iOS: reversed client ID URL scheme must be in `app.json`
-
-### Web build fails
-- Run `npm run type-check` to catch TypeScript errors first
-- Ensure `react-native-web` is installed
-
-### "Cannot read property of undefined" on startup
-- Check all `EXPO_PUBLIC_FIREBASE_*` env vars are set
-- Restart the dev server after editing `.env`
+- **`auth/unauthorized-domain`**: Ensure your deployment domain is listed in Firebase Console → Authentication → Authorized domains.
+- **`auth/popup-blocked`**: Allow popups in your browser settings for the deployment URL.
+- **Access blocked: Authorization Error (403)**: Add your test account to **Google Cloud Console → OAuth consent screen → Test users**.
+- **Blank page on Netlify refresh**: Verified handled by `netlify.toml` SPA rewrite rule (`/* -> /index.html`).
 
 ---
 
-## 🔗 GitHub Commands
+## 📄 License & Attribution
 
-```bash
-git init
-git add .
-git commit -m "feat: initial HBPlus cross-platform auth app"
-git branch -M main
-git remote add origin https://github.com/YOUR_USERNAME/hbplus-auth.git
-git push -u origin main
-```
-
----
-
-*Built with ❤️ for HBPlus · Secure · Scalable · Cross-Platform*
+Developed for HBPlus Cross-Platform Authentication Portal. All rights reserved.
