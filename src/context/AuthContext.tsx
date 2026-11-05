@@ -14,7 +14,7 @@ import {
   signInWithGoogle as googleSignIn,
   signOut as googleSignOut,
 } from '../services/authService';
-import { upsertUserProfile, getUserProfile } from '../services/userService';
+import { upsertUserProfile } from '../services/userService';
 import { isEmailDomainAllowed } from '../utils/domainValidator';
 import { AUTH_CONFIG } from '../config/authConfig';
 import { AuthContextValue, AuthState } from '../types/auth';
@@ -24,7 +24,7 @@ const INITIAL_STATE: AuthState = {
   profile: null,
   isAuthenticated: false,
   isAuthorized: false,
-  isLoading: true,
+  isLoading: true,       // starts true — resolved by onAuthStateChanged
   error: null,
 };
 
@@ -32,70 +32,102 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(INITIAL_STATE);
-  // Prevent state updates on unmounted component
   const mounted = useRef(true);
+
   useEffect(() => () => { mounted.current = false; }, []);
 
   const setPartial = useCallback((partial: Partial<AuthState>) => {
-    if (mounted.current) {
-      setState(prev => ({ ...prev, ...partial }));
-    }
+    if (mounted.current) setState(prev => ({ ...prev, ...partial }));
   }, []);
 
-  // ── Firebase auth state listener ───────────────────────────────────────────
+  // ── Firebase auth state listener ──────────────────────────────────────────
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async firebaseUser => {
-      if (!firebaseUser) {
-        setPartial({
-          user: null,
-          profile: null,
-          isAuthenticated: false,
-          isAuthorized: false,
-          isLoading: false,
-          error: null,
-        });
-        return;
+    // Safety net: if Firebase doesn't respond in 8 seconds, unblock the UI
+    const timeoutId = setTimeout(() => {
+      if (mounted.current) {
+        console.warn('[AuthContext] Firebase onAuthStateChanged timed out — showing login screen.');
+        setPartial({ isLoading: false });
       }
+    }, 8000);
 
-      try {
-        const email = firebaseUser.email ?? '';
-        const isAllowed = isEmailDomainAllowed(email);
+    let unsubscribe: (() => void) | undefined;
 
-        if (!isAllowed) {
-          // Sign out unauthorized users immediately
-          await googleSignOut();
+    try {
+      unsubscribe = onAuthStateChanged(
+        auth,
+        async (firebaseUser) => {
+          clearTimeout(timeoutId); // Firebase responded — cancel timeout
+
+          if (!firebaseUser) {
+            // No session → show login screen
+            setPartial({
+              user: null,
+              profile: null,
+              isAuthenticated: false,
+              isAuthorized: false,
+              isLoading: false,
+              error: null,
+            });
+            return;
+          }
+
+          try {
+            const email = firebaseUser.email ?? '';
+            const isAllowed = isEmailDomainAllowed(email);
+
+            if (!isAllowed) {
+              // Wrong domain → sign out immediately
+              await googleSignOut();
+              setPartial({
+                user: null,
+                profile: null,
+                isAuthenticated: false,
+                isAuthorized: false,
+                isLoading: false,
+                error: AUTH_CONFIG.UNAUTHORIZED_MESSAGE,
+              });
+              return;
+            }
+
+            // Authorised → upsert Firestore profile
+            const profile = await upsertUserProfile(firebaseUser);
+
+            setPartial({
+              user: firebaseUser,
+              profile,
+              isAuthenticated: true,
+              isAuthorized: true,
+              isLoading: false,
+              error: null,
+            });
+          } catch (innerErr: any) {
+            console.error('[AuthContext] profile error:', innerErr);
+            setPartial({
+              isLoading: false,
+              error: 'Failed to load your profile. Please try again.',
+            });
+          }
+        },
+        (authError) => {
+          // onAuthStateChanged error handler
+          clearTimeout(timeoutId);
+          console.error('[AuthContext] Firebase auth error:', authError);
           setPartial({
-            user: null,
-            profile: null,
-            isAuthenticated: false,
-            isAuthorized: false,
             isLoading: false,
-            error: AUTH_CONFIG.UNAUTHORIZED_MESSAGE,
+            error: 'Firebase connection failed. Check your internet connection.',
           });
-          return;
         }
+      );
+    } catch (initErr: any) {
+      clearTimeout(timeoutId);
+      console.error('[AuthContext] onAuthStateChanged init error:', initErr);
+      setPartial({ isLoading: false, error: 'Firebase failed to initialise.' });
+    }
 
-        // Fetch or create Firestore profile
-        const profile = await upsertUserProfile(firebaseUser);
-
-        setPartial({
-          user: firebaseUser,
-          profile,
-          isAuthenticated: true,
-          isAuthorized: true,
-          isLoading: false,
-          error: null,
-        });
-      } catch (err: any) {
-        console.error('[AuthContext] onAuthStateChanged error:', err);
-        setPartial({
-          isLoading: false,
-          error: 'An error occurred while loading your session. Please try again.',
-        });
-      }
-    });
-
-    return unsubscribe;
+    return () => {
+      clearTimeout(timeoutId);
+      unsubscribe?.();
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── signInWithGoogle ───────────────────────────────────────────────────────
@@ -103,13 +135,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setPartial({ isLoading: true, error: null });
     try {
       await googleSignIn();
-      // onAuthStateChanged will handle the rest
+      // onAuthStateChanged fires automatically after sign-in
     } catch (err: any) {
-      const message =
-        err.message?.includes('cancelled') || err.code === 'auth/popup-closed-by-user'
+      const msg =
+        err.code === 'auth/popup-closed-by-user' ||
+        err.code === 'auth/cancelled-popup-request' ||
+        err.message?.toLowerCase().includes('cancel')
           ? 'Sign-in was cancelled.'
           : err.message ?? 'Google sign-in failed. Please try again.';
-      setPartial({ isLoading: false, error: message });
+      setPartial({ isLoading: false, error: msg });
     }
   }, [setPartial]);
 
@@ -126,17 +160,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading: false,
         error: null,
       });
-    } catch (err) {
+    } catch {
       setPartial({ isLoading: false });
     }
   }, [setPartial]);
 
-  const clearError = useCallback(() => setPartial({ error: null }), [setPartial]);
+  const clearError = useCallback(
+    () => setPartial({ error: null }),
+    [setPartial]
+  );
 
   return (
-    <AuthContext.Provider
-      value={{ ...state, signInWithGoogle, signOut, clearError }}
-    >
+    <AuthContext.Provider value={{ ...state, signInWithGoogle, signOut, clearError }}>
       {children}
     </AuthContext.Provider>
   );
@@ -144,8 +179,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuthContext(): AuthContextValue {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuthContext must be used inside <AuthProvider>');
-  }
+  if (!ctx) throw new Error('useAuthContext must be used inside <AuthProvider>');
   return ctx;
 }
