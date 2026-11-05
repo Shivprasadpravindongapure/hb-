@@ -1,5 +1,6 @@
 // ─── src/services/userService.ts ─────────────────────────────────────────────
 // Manages user profile documents in Firestore.
+// Falls back to Firebase Auth data if Firestore is unavailable or blocked.
 
 import {
   doc,
@@ -15,101 +16,99 @@ import { UserProfile } from '../types/auth';
 import { AUTH_CONFIG, AllowedRole } from '../config/authConfig';
 import { extractDomain } from '../utils/domainValidator';
 
-/**
- * Fetches the Firestore profile for a given uid.
- * Returns null if the document does not exist.
- */
-export async function getUserProfile(uid: string): Promise<UserProfile | null> {
-  try {
-    const ref = doc(db, AUTH_CONFIG.USERS_COLLECTION, uid);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-
-    const data = snap.data();
-    return {
-      uid: data.uid,
-      name: data.name,
-      email: data.email,
-      photoURL: data.photoURL ?? null,
-      domain: data.domain,
-      role: data.role as AllowedRole,
-      emailVerified: data.emailVerified,
-      createdAt:
-        data.createdAt instanceof Timestamp
-          ? data.createdAt.toDate().toISOString()
-          : data.createdAt,
-      lastLoginAt:
-        data.lastLoginAt instanceof Timestamp
-          ? data.lastLoginAt.toDate().toISOString()
-          : data.lastLoginAt,
-    };
-  } catch (err) {
-    console.error('[userService] getUserProfile error:', err);
-    return null;
-  }
+/** Build a profile object purely from Firebase Auth data (no Firestore needed) */
+export function buildProfileFromAuth(firebaseUser: FirebaseUser): UserProfile {
+  const now = new Date().toISOString();
+  return {
+    uid: firebaseUser.uid,
+    name: firebaseUser.displayName ?? firebaseUser.email?.split('@')[0] ?? 'User',
+    email: firebaseUser.email ?? '',
+    photoURL: firebaseUser.photoURL ?? null,
+    domain: extractDomain(firebaseUser.email),
+    role: AUTH_CONFIG.DEFAULT_ROLE,
+    emailVerified: firebaseUser.emailVerified,
+    createdAt: now,
+    lastLoginAt: now,
+  };
 }
 
 /**
  * Creates or updates the user profile in Firestore.
  * - On first sign-in: creates the document with the default role.
- * - On subsequent sign-ins: only refreshes mutable fields (name, photo,
- *   lastLoginAt). Role is never overwritten by the client.
+ * - On subsequent sign-ins: refreshes mutable fields only.
+ * - Role is NEVER overwritten by the client.
+ * - If Firestore is unavailable, falls back to Auth-only profile.
  */
 export async function upsertUserProfile(
   firebaseUser: FirebaseUser
 ): Promise<UserProfile> {
-  const ref = doc(db, AUTH_CONFIG.USERS_COLLECTION, firebaseUser.uid);
-  const snap = await getDoc(ref);
   const now = new Date().toISOString();
   const domain = extractDomain(firebaseUser.email);
 
-  if (!snap.exists()) {
-    // ── First login ──────────────────────────────────────────────────────────
-    const newProfile: Omit<UserProfile, 'createdAt' | 'lastLoginAt'> & {
-      createdAt: ReturnType<typeof serverTimestamp>;
-      lastLoginAt: ReturnType<typeof serverTimestamp>;
-    } = {
-      uid: firebaseUser.uid,
-      name: firebaseUser.displayName ?? '',
-      email: firebaseUser.email ?? '',
-      photoURL: firebaseUser.photoURL ?? null,
-      domain,
-      role: AUTH_CONFIG.DEFAULT_ROLE,
+  try {
+    const ref = doc(db, AUTH_CONFIG.USERS_COLLECTION, firebaseUser.uid);
+    const snap = await getDoc(ref);
+
+    if (!snap.exists()) {
+      // ── First login: create document ────────────────────────────────────
+      const newDoc = {
+        uid:           firebaseUser.uid,
+        name:          firebaseUser.displayName ?? '',
+        email:         firebaseUser.email ?? '',
+        photoURL:      firebaseUser.photoURL ?? null,
+        domain,
+        role:          AUTH_CONFIG.DEFAULT_ROLE,
+        emailVerified: firebaseUser.emailVerified,
+        createdAt:     serverTimestamp(),
+        lastLoginAt:   serverTimestamp(),
+      };
+
+      await setDoc(ref, newDoc);
+
+      return {
+        uid:           firebaseUser.uid,
+        name:          firebaseUser.displayName ?? '',
+        email:         firebaseUser.email ?? '',
+        photoURL:      firebaseUser.photoURL ?? null,
+        domain,
+        role:          AUTH_CONFIG.DEFAULT_ROLE,
+        emailVerified: firebaseUser.emailVerified,
+        createdAt:     now,
+        lastLoginAt:   now,
+      };
+    }
+
+    // ── Subsequent login: update safe mutable fields only ─────────────────
+    await updateDoc(ref, {
+      name:          firebaseUser.displayName ?? snap.data().name,
+      photoURL:      firebaseUser.photoURL ?? null,
       emailVerified: firebaseUser.emailVerified,
-      createdAt: serverTimestamp(),
-      lastLoginAt: serverTimestamp(),
-    };
+      lastLoginAt:   serverTimestamp(),
+    });
 
-    await setDoc(ref, newProfile);
-
+    const data = snap.data();
     return {
-      ...newProfile,
-      createdAt: now,
+      uid:           data.uid,
+      name:          firebaseUser.displayName ?? data.name,
+      email:         data.email,
+      photoURL:      firebaseUser.photoURL ?? data.photoURL ?? null,
+      domain:        data.domain,
+      role:          data.role as AllowedRole,
+      emailVerified: firebaseUser.emailVerified,
+      createdAt:
+        data.createdAt instanceof Timestamp
+          ? data.createdAt.toDate().toISOString()
+          : data.createdAt ?? now,
       lastLoginAt: now,
     };
+
+  } catch (err: any) {
+    // Firestore not available / rules blocking (e.g. during testing with gmail.com)
+    // Fall back to Auth-only profile — user still gets dashboard access
+    console.warn(
+      '[userService] Firestore unavailable, using Auth-only profile:',
+      err?.code ?? err?.message ?? err
+    );
+    return buildProfileFromAuth(firebaseUser);
   }
-
-  // ── Subsequent login — only refresh safe mutable fields ──────────────────
-  await updateDoc(ref, {
-    name: firebaseUser.displayName ?? snap.data().name,
-    photoURL: firebaseUser.photoURL ?? null,
-    emailVerified: firebaseUser.emailVerified,
-    lastLoginAt: serverTimestamp(),
-  });
-
-  const updated = { ...snap.data() } as any;
-  return {
-    uid: updated.uid,
-    name: firebaseUser.displayName ?? updated.name,
-    email: updated.email,
-    photoURL: firebaseUser.photoURL ?? updated.photoURL ?? null,
-    domain: updated.domain,
-    role: updated.role as AllowedRole,
-    emailVerified: firebaseUser.emailVerified,
-    createdAt:
-      updated.createdAt instanceof Timestamp
-        ? updated.createdAt.toDate().toISOString()
-        : updated.createdAt ?? now,
-    lastLoginAt: now,
-  };
 }

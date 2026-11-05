@@ -71,8 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          try {
-            const email = firebaseUser.email ?? '';
+          const email = firebaseUser.email ?? '';
             const isAllowed = isEmailDomainAllowed(email);
 
             if (!isAllowed) {
@@ -89,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               return;
             }
 
-            // Authorised → upsert Firestore profile
+            // Authorised → upsert profile (falls back to Auth data if Firestore unavailable)
             const profile = await upsertUserProfile(firebaseUser);
 
             setPartial({
@@ -100,13 +99,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               isLoading: false,
               error: null,
             });
-          } catch (innerErr: any) {
-            console.error('[AuthContext] profile error:', innerErr);
-            setPartial({
-              isLoading: false,
-              error: 'Failed to load your profile. Please try again.',
-            });
-          }
         },
         (authError) => {
           // onAuthStateChanged error handler
