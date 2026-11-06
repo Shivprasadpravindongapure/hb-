@@ -21,10 +21,6 @@
       }
     },
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1A73E8"
-      },
       "package": "com.hbplus.auth"
     },
     "web": {
