@@ -67,18 +67,16 @@ export default function LoginScreen() {
 
             {/* Domain restriction notice */}
             <View style={styles.domainNotice}>
-              <Text style={styles.domainLabel}>Restricted to</Text>
-              <View style={styles.domainPill}>
-                <Text style={styles.domainText}>
-                  @{AUTH_CONFIG.ALLOWED_DOMAIN}
-                </Text>
-              </View>
+              <Text style={styles.domainLabel}>Allowed accounts:</Text>
+              {AUTH_CONFIG.ALLOWED_DOMAINS.map((domain) => (
+                <View key={domain} style={styles.domainPill}>
+                  <Text style={styles.domainText}>@{domain}</Text>
+                </View>
+              ))}
             </View>
 
             <Text style={styles.helperText}>
-              Only email addresses from{' '}
-              <Text style={styles.helperBold}>@{AUTH_CONFIG.ALLOWED_DOMAIN}</Text>{' '}
-              are authorised to access this portal.
+              Access is limited to the email domains shown above.
             </Text>
           </View>
 
@@ -203,6 +201,8 @@ const styles = StyleSheet.create({
   domainNotice: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
     gap: 8,
     marginBottom: 12,
   },

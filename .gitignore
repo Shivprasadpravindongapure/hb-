@@ -28,7 +28,6 @@ GoogleService-Info.plist
 **/serviceAccountKey.json
 firebase-debug.log
 .firebaserc
-firebase.json
 
 # Environment
 .env

@@ -40,7 +40,7 @@
 HBPlus Auth is a **production-quality, cross-platform authentication portal** that:
 
 - Authenticates users via **Google OAuth 2.0 → Firebase Auth**
-- Restricts access exclusively to `@hbplus.fit` email accounts (configurable to other domains like `gmail.com` for local testing)
+- Restricts access to exact, configured email domains; production supports `@hbplus.fit` and `@gmail.com`
 - Stores authorised user profiles in **Cloud Firestore**
 - Enforces domain restrictions across **frontend, state management, and backend (Firestore security rules)**
 - Implements **role-based access** (Admin / User) stored in Firestore
@@ -53,7 +53,7 @@ HBPlus Auth is a **production-quality, cross-platform authentication portal** th
 |---|---|---|
 | Google Sign-In (Web popup) | ✅ | Firebase `signInWithPopup` with popup-blocked fallbacks |
 | Google Sign-In (Native) | ✅ | `expo-auth-session` + `expo-crypto` PKCE |
-| Domain validation (`@hbplus.fit`) | ✅ | Exact match, rejects subdomains, lookalike prefixes/suffixes |
+| Domain validation | ✅ | Exact match against the configured allowlist; rejects lookalikes and unlisted domains |
 | Protected Dashboard route | ✅ | Route guarded; unauthenticated access redirects to login |
 | Logout + session clear | ✅ | Firebase `signOut` + full client state cleanup |
 | Loading & error states | ✅ | Non-blocking states with 8s timeout protection |
@@ -174,7 +174,10 @@ Variables with the `EXPO_PUBLIC_` prefix are bundled into the client build by Ex
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth Web Client ID | `443268477918-ej2kfuuopqiselacod7gn2ad6jcj5rrr.apps.googleusercontent.com` |
 | `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google OAuth Android Client ID | *(from Google Cloud Console)* |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` | Google OAuth iOS Client ID | *(from Google Cloud Console)* |
-| `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN` | Authorized email domain | `hbplus.fit` *(or `gmail.com` for local testing)* |
+| `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAINS` | Comma-separated authorized email domains | `hbplus.fit,gmail.com` |
+| `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN` | Legacy single-domain setting (used only when the plural setting is absent) | `hbplus.fit` |
+
+> **Production access note:** Allowing `gmail.com` authorizes every Google account with a `@gmail.com` address, not just your test accounts. Remove it from `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAINS` and the Firestore rules when testing is finished.
 
 > ⚠️ **SECURITY WARNING:** Never place the Google OAuth **Client Secret** (`GOCSPX-...`) in `.env` or client code. Client secrets are exclusively meant for trusted server environments.
 
@@ -187,7 +190,8 @@ Variables with the `EXPO_PUBLIC_` prefix are bundled into the client build by Ex
 3. **Add Authorized Domains**:
    - `localhost` (for local development)
    - `hbplus-authentication-93ca5.firebaseapp.com`
-   - `<your-site-name>.netlify.app` (your Netlify production domain)
+   - `jolly-entremet-88c205.netlify.app` (the deployed site shown in the production screenshot)
+   - Any custom production hostname used to open the app
 4. **Deploy Firestore Rules**:
    ```bash
    npm install -g firebase-tools
@@ -205,11 +209,10 @@ Variables with the `EXPO_PUBLIC_` prefix are bundled into the client build by Ex
 3. Under **Authorized JavaScript origins**, add:
    - `http://localhost`
    - `http://localhost:8081`
-   - `https://<your-site-name>.netlify.app`
+   - `https://jolly-entremet-88c205.netlify.app`
 4. Under **Authorized redirect URIs**, add:
-   - `http://localhost:8081`
    - `https://hbplus-authentication-93ca5.firebaseapp.com/__/auth/handler`
-   - `https://<your-site-name>.netlify.app/__/auth/handler`
+   *(Use the `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN` value if your Firebase Auth domain differs.)*
 5. Under **OAuth consent screen** → **Test users**, add test email accounts while in testing mode.
 
 ---
@@ -241,15 +244,15 @@ npm run build:web
 The domain validation operates through a multi-layered defense mechanism:
 
 1. **Layer 1 — Client Validation (`src/utils/domainValidator.ts`)**:
-   - Normalizes email to lowercase.
-   - Extracts exact domain segment after the last `@`.
+   - Normalizes email and configured domains to lowercase.
+   - Allows only exact domains in `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAINS`.
    - Rejects lookalike patterns (e.g., `user@fakehbplus.fit`, `hbplus.fit@gmail.com`, `user@sub.hbplus.fit`).
 2. **Layer 2 — Context Enforcement (`src/context/AuthContext.tsx`)**:
    - Detects domain mismatch immediately upon token issuance.
    - Signs out the unauthorized user from Firebase.
    - Shows the exact error message: `"Access restricted. Please login using your official domain email."`
 3. **Layer 3 — Database Authorization (`firestore.rules`)**:
-   - Validates that `request.auth.token.email.matches('.*@hbplus\\.fit$')`.
+   - Validates the token email against the production allowlist (`@hbplus.fit` or `@gmail.com`).
    - Prohibits unauthorized users from reading or writing Firestore documents, even with direct REST API requests.
 
 ---
@@ -278,9 +281,9 @@ The domain validation operates through a multi-layered defense mechanism:
    EXPO_PUBLIC_FIREBASE_APP_ID = 1:443207669424:web:0de4ce0fd9710fc5cd4d75
    EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID = G-JKZYTEZSN8
    EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID = 443268477918-ej2kfuuopqiselacod7gn2ad6jcj5rrr.apps.googleusercontent.com
-   EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN = hbplus.fit
+   EXPO_PUBLIC_ALLOWED_EMAIL_DOMAINS = hbplus.fit,gmail.com
    ```
-   *(Note: Set `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN` to `gmail.com` if you wish to test live deployments using standard Gmail accounts)*.
+   *(Do not set only `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN`; that legacy setting replaces the plural allowlist when the plural variable is absent.)*
 
 6. Click **Deploy site**.
 
@@ -306,21 +309,21 @@ netlify deploy --prod --dir=dist
 
 ### ⚠️ Crucial Post-Deployment Steps (Do Not Skip!)
 
-Once Netlify assigns your URL (e.g., `https://hbplus-portal.netlify.app`):
+For the deployed URL shown in the reported error (`https://jolly-entremet-88c205.netlify.app`):
 
 1. **Firebase Console**:
    - Open **Authentication** → **Settings** → **Authorized domains**.
-   - Click **Add domain** and enter your Netlify hostname (e.g. `hbplus-portal.netlify.app`).
+   - Click **Add domain** and enter `jolly-entremet-88c205.netlify.app` (hostname only; no scheme or path).
 
 2. **Google Cloud Console**:
    - Open **APIs & Services** → **Credentials** → Select your **Web Client ID**.
    - Under **Authorized JavaScript origins**, add:
      ```
-     https://hbplus-portal.netlify.app
+     https://jolly-entremet-88c205.netlify.app
      ```
    - Under **Authorized redirect URIs**, add:
      ```
-     https://hbplus-portal.netlify.app/__/auth/handler
+     https://jolly-entremet-88c205.netlify.app/__/auth/handler
      ```
    - Click **Save**.
 
@@ -332,8 +335,8 @@ Once Netlify assigns your URL (e.g., `https://hbplus-portal.netlify.app`):
 
 | Test Case | Account / Input | Expected Result |
 |---|---|---|
-| **TEST 1: Authorized Login** | `employee@hbplus.fit` | Authentication succeeds; redirected to Dashboard |
-| **TEST 2: Blocked Domain (Gmail)** | `example@gmail.com` | Access denied: `"Access restricted. Please login using your official domain email."` |
+| **TEST 1: Authorized organisation login** | `employee@hbplus.fit` | Authentication succeeds; redirected to Dashboard |
+| **TEST 2: Authorized Gmail test login** | `example@gmail.com` | Authentication succeeds; redirected to Dashboard |
 | **TEST 3: Blocked Domain (Yahoo)** | `user@yahoo.com` | Access denied immediately |
 | **TEST 4: Direct Protected URL** | Direct URL to `/dashboard` | Redirected to `/login` without revealing content |
 | **TEST 5: Session Persistence** | Refresh dashboard page | Session persists through Firebase auth listener |
@@ -345,7 +348,7 @@ Once Netlify assigns your URL (e.g., `https://hbplus-portal.netlify.app`):
 
 ## ❌ Troubleshooting
 
-- **`auth/unauthorized-domain`**: Ensure your deployment domain is listed in Firebase Console → Authentication → Authorized domains.
+- **`auth/unauthorized-domain`**: Add the exact hostname you opened (`jolly-entremet-88c205.netlify.app`) in Firebase Console → Authentication → Settings → Authorized domains, then redeploy after setting `EXPO_PUBLIC_ALLOWED_EMAIL_DOMAINS`.
 - **`auth/popup-blocked`**: Allow popups in your browser settings for the deployment URL.
 - **Access blocked: Authorization Error (403)**: Add your test account to **Google Cloud Console → OAuth consent screen → Test users**.
 - **Blank page on Netlify refresh**: Verified handled by `netlify.toml` SPA rewrite rule (`/* -> /index.html`).

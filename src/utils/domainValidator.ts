@@ -6,8 +6,8 @@
 import { AUTH_CONFIG } from '../config/authConfig';
 
 /**
- * Returns true ONLY if `email` is a valid address whose domain is EXACTLY
- * the configured allowed domain (case-insensitive).
+ * Returns true ONLY if `email` is a valid address whose domain exactly
+ * matches one of the configured allowed domains (case-insensitive).
  *
  * Explicitly rejects:
  *  - null / undefined / empty strings
@@ -18,7 +18,7 @@ import { AUTH_CONFIG } from '../config/authConfig';
  */
 export function isEmailDomainAllowed(
   email: string | null | undefined,
-  allowedDomain: string = AUTH_CONFIG.ALLOWED_DOMAIN
+  allowedDomains: readonly string[] = AUTH_CONFIG.ALLOWED_DOMAINS
 ): boolean {
   if (!email || typeof email !== 'string') return false;
 
@@ -30,10 +30,12 @@ export function isEmailDomainAllowed(
   if (normalized.indexOf('@') !== atIndex) return false; // multiple @
 
   const domain = normalized.slice(atIndex + 1);
-  const expected = allowedDomain.trim().toLowerCase();
+  const expectedDomains = allowedDomains.map((domain) =>
+    domain.trim().toLowerCase()
+  );
 
   // Exact match only — no subdomain, no suffix tricks
-  return domain === expected;
+  return expectedDomains.includes(domain);
 }
 
 /**

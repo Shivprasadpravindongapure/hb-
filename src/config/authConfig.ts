@@ -2,9 +2,17 @@
 // Centralized auth & domain configuration.
 // Never hard-code secrets here — values are pulled from env at build time.
 
+const configuredDomains: string =
+  process.env.EXPO_PUBLIC_ALLOWED_EMAIL_DOMAINS ??
+  process.env.EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN ??
+  'hbplus.fit,gmail.com';
+
 export const AUTH_CONFIG = {
-  /** The only email domain allowed to access the application */
-  ALLOWED_DOMAIN: process.env.EXPO_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? 'hbplus.fit',
+  /** Exact email domains allowed to access the application */
+  ALLOWED_DOMAINS: configuredDomains
+    .split(',')
+    .map((domain) => domain.trim().toLowerCase())
+    .filter(Boolean),
 
   /** Organisation display name shown in the UI */
   ORG_NAME: 'HBPlus',

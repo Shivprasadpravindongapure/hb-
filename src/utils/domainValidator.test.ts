@@ -5,43 +5,45 @@
 
 import { isEmailDomainAllowed, extractDomain } from './domainValidator';
 
+const ALLOWED_DOMAINS = ['hbplus.fit', 'gmail.com'];
+
 describe('isEmailDomainAllowed', () => {
   // ── ALLOWED ──────────────────────────────────────────────────────────────
-  test('TEST 1: employee@hbplus.fit → allowed', () => {
-    expect(isEmailDomainAllowed('employee@hbplus.fit')).toBe(true);
+  test('employee@hbplus.fit → allowed', () => {
+    expect(isEmailDomainAllowed('employee@hbplus.fit', ALLOWED_DOMAINS)).toBe(true);
   });
 
-  test('TEST 1b: prasad@hbplus.fit → allowed', () => {
-    expect(isEmailDomainAllowed('prasad@hbplus.fit')).toBe(true);
+  test('prasad@hbplus.fit → allowed', () => {
+    expect(isEmailDomainAllowed('prasad@hbplus.fit', ALLOWED_DOMAINS)).toBe(true);
+  });
+
+  test('test account at gmail.com → allowed', () => {
+    expect(isEmailDomainAllowed('example@gmail.com', ALLOWED_DOMAINS)).toBe(true);
   });
 
   test('Case-insensitive: EMPLOYEE@HBPLUS.FIT → allowed', () => {
-    expect(isEmailDomainAllowed('EMPLOYEE@HBPLUS.FIT')).toBe(true);
+    expect(isEmailDomainAllowed('EMPLOYEE@HBPLUS.FIT', ALLOWED_DOMAINS)).toBe(true);
   });
 
   test('Mixed case: Admin@HbPlus.Fit → allowed', () => {
-    expect(isEmailDomainAllowed('Admin@HbPlus.Fit')).toBe(true);
+    expect(isEmailDomainAllowed('Admin@HbPlus.Fit', ALLOWED_DOMAINS)).toBe(true);
   });
 
   // ── BLOCKED ───────────────────────────────────────────────────────────────
-  test('TEST 2: example@gmail.com → blocked', () => {
-    expect(isEmailDomainAllowed('example@gmail.com')).toBe(false);
-  });
-
-  test('TEST 3: user@yahoo.com → blocked', () => {
-    expect(isEmailDomainAllowed('user@yahoo.com')).toBe(false);
+  test('user@yahoo.com → blocked', () => {
+    expect(isEmailDomainAllowed('user@yahoo.com', ALLOWED_DOMAINS)).toBe(false);
   });
 
   test('Lookalike: user@fakehbplus.fit → blocked', () => {
-    expect(isEmailDomainAllowed('user@fakehbplus.fit')).toBe(false);
+    expect(isEmailDomainAllowed('user@fakehbplus.fit', ALLOWED_DOMAINS)).toBe(false);
   });
 
   test('Lookalike: user@hbplus.fit.evil.com → blocked', () => {
-    expect(isEmailDomainAllowed('user@hbplus.fit.evil.com')).toBe(false);
+    expect(isEmailDomainAllowed('user@hbplus.fit.evil.com', ALLOWED_DOMAINS)).toBe(false);
   });
 
   test('TEST 9: Prefix injection hbplus.fit@gmail.com → blocked', () => {
-    expect(isEmailDomainAllowed('hbplus.fit@gmail.com')).toBe(false);
+    expect(isEmailDomainAllowed('hbplus.fit@gmail.com', ALLOWED_DOMAINS)).toBe(false);
   });
 
   test('Null → blocked', () => {
@@ -57,7 +59,11 @@ describe('isEmailDomainAllowed', () => {
   });
 
   test('Subdomain: user@sub.hbplus.fit → blocked (exact match only)', () => {
-    expect(isEmailDomainAllowed('user@sub.hbplus.fit')).toBe(false);
+    expect(isEmailDomainAllowed('user@sub.hbplus.fit', ALLOWED_DOMAINS)).toBe(false);
+  });
+
+  test('custom allowlist is respected', () => {
+    expect(isEmailDomainAllowed('example@gmail.com', ['hbplus.fit'])).toBe(false);
   });
 });
 

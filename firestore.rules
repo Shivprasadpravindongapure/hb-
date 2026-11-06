@@ -23,11 +23,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    /** True if the caller's token email ends with @hbplus.fit */
+    /** True if the caller's email is in one of the app's allowed domains */
     function isAuthorizedDomain() {
       return isSignedIn()
         && request.auth.token.email != null
-        && request.auth.token.email.matches('.*@hbplus\\.fit$');
+        && (request.auth.token.email.matches('.*@hbplus\\.fit$')
+            || request.auth.token.email.matches('.*@gmail\\.com$'));
     }
 
     /** True if the caller's email is verified by Google */
@@ -66,7 +67,8 @@ service cloud.firestore {
                     && request.resource.data.uid == uid
                     && request.resource.data.role == 'user'
                     && request.resource.data.email == request.auth.token.email
-                    && request.resource.data.domain == 'hbplus.fit';
+                    && (request.resource.data.domain == 'hbplus.fit'
+                        || request.resource.data.domain == 'gmail.com');
 
       // UPDATE: only the owner, with authorised domain.
       //         Users CANNOT change role, uid, email, or domain.
